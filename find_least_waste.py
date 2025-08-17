@@ -11,14 +11,6 @@ Rect2D = Tuple[int, int, int, int]  # (x1, x2, y1, y2)
 Slots1D = Iterable[Rect1D]
 Slots2D = Set[Rect2D]
 
-# Configuration
-# unavailable_slots: (start_time, end_time, bandwidth)
-unavailable_slots = {(10, 13, 50), (15, 30, 75)}
-# total_slots: (start_time, end_time, bandwidth)
-total_slots = {(0, 30, 100)}
-# request r: (size, priority)
-request_r = [(300, 5), (200, 2), (600, 1)]
-
 # Tracking Bandwidth Usage
 current_bandwidth_usage = {}  # {time_point: current_max_bandwidth_used}
 
@@ -169,9 +161,9 @@ def calculate_priority_bandwidth_ratio(original_prio, priority):
     return float(original_prio)
 
 
-def allocate_requests_fill_bandwidth(slot_rect, requests):
+def allocate_requests_fill_bandwidth(slot_rect, requests, request_r: List[Tuple[int, int]]):
     """
-    TODO COMPLETED: Priority-based bandwidth allocation
+    Priority-based bandwidth allocation
     Calculate height first based on priority ratio, then calculate individual widths
     Each request gets different width based on its size/height ratio
     """
@@ -289,7 +281,9 @@ def allocate_requests_fill_bandwidth(slot_rect, requests):
 def find_r_slot_with_allocation(
         r_list: List[Tuple[int, int]],
         slot_area_list: List[int],
-        slot_rects: List[Rect2D]
+        slot_rects: List[Rect2D],
+        unavailable_slots: Slots1D,
+        request_r: List[Tuple[int, int]]
 ) -> Tuple[List[str], List[Tuple[int, int, float, float, int]], List[Rect2D], float, float]:
     # Reset global bandwidth usage
     global current_bandwidth_usage
@@ -324,7 +318,7 @@ def find_r_slot_with_allocation(
             if can_fit_all_remaining_requests(r_remaining, current_slot_area):
                 result.append(f"All remaining requests {r_remaining} fitted in the {ordinal(slot_index)} area")
 
-                alloc, waste = allocate_requests_fill_bandwidth(current_slot_rect, r_remaining)
+                alloc, waste = allocate_requests_fill_bandwidth(current_slot_rect, r_remaining, request_r)
                 allocation.extend(alloc)
                 wasted.extend(waste)
                 return result, allocation, wasted, total_available_area, total_r_area
@@ -392,22 +386,18 @@ def visualize_integrated_schedule(request_r, unavailable_slots, total_slots, all
         max_time = max(max_time, max(x2 for x1, x2, _, _, _ in allocations))
     max_time = max(max_time, 30)  # Minimum time range
 
-    # Get bandwidth from total_slots
     total_bandwidth = next(iter(total_slots))[2] if total_slots else 100
 
-    # total area boundary
     for x1, x2, h in total_slots:
         ax.add_patch(patches.Rectangle((x1, 0), x2 - x1, h,
                                        fill=False, edgecolor='black', linewidth=2))
 
-    # unavailable slots
     for x1, x2, h in unavailable_slots:
         ax.add_patch(patches.Rectangle((x1, 0), x2 - x1, h,
                                        color='red', alpha=0.6, label="Unavailable"))
         ax.text((x1 + x2) / 2, h / 2, f'Reserved\n{h} BW',
                 ha='center', va='center', fontsize=8, color='white', weight='bold')
 
-    # allocated requests
     for x1, x2, y1, y2, rid in allocations:
         ax.add_patch(patches.Rectangle((x1, y1), x2 - x1, y2 - y1,
                                        color='blue', alpha=0.7))
@@ -438,10 +428,9 @@ def visualize_integrated_schedule(request_r, unavailable_slots, total_slots, all
         info_y -= dy
 
     ax.set_xlim(0, max_time + 8)
-    ax.set_ylim(0, total_bandwidth + 5)
+    ax.set_ylim(0, total_bandwidth + 10)
     ax.set_xlabel('Time', fontsize=12)
     ax.set_ylabel('Bandwidth', fontsize=12)
-    ax.set_title('Integrated Bandwidth Allocation Visualization', fontsize=14, weight='bold')
     ax.grid(True, alpha=0.3)
 
     handles = []
@@ -454,27 +443,3 @@ def visualize_integrated_schedule(request_r, unavailable_slots, total_slots, all
 
     plt.tight_layout()
     plt.show()
-
-
-def main():
-    """Main function to run the bandwidth allocation algorithm"""
-    slot_rects = get_next_slot(unavailable_slots, total_slots)
-    slot_areas = compute_slot_areas(slot_rects)
-    request_areas = r_sorted_by_area(request_r)
-
-    result_texts, allocations, waste_rects, total_available_area, total_r_area = find_r_slot_with_allocation(
-        request_areas, slot_areas, slot_rects)
-
-    print("\n--- Allocation Details ---")
-    for x1, x2, y1, y2, rid in allocations:
-        print(f"R{rid}: time [{x1:.1f}, {x2:.1f}], bandwidth [{y1:.2f}, {y2:.2f}], height: {y2 - y1:.2f}")
-
-    if total_available_area < total_r_area:
-        print(f"\nNeed to extend space (available: {total_available_area}, required: {total_r_area})")
-
-    # Display visualization
-    visualize_integrated_schedule(request_r, unavailable_slots, total_slots, allocations, waste_rects)
-
-
-if __name__ == "__main__":
-    main()
